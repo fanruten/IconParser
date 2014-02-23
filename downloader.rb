@@ -9,31 +9,23 @@ require "open-uri"
 @userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_1) AppleWebKit/537.36 (KHTML, like Gecko)"
 @proxy = nil
 @threadsCount = 10
-@proxyies = [
-	nil,
-	"http://93.91.233.50:8080",
-	"http://61.19.42.244:8080",
-	"http://190.41.58.77:8080",
-	"http://173.201.95.24:80",
-	"http://:61.19.42.244:80",
-	"http://85.185.45.227:80",
-	"http://119.233.255.24:81",
-	"http://110.208.26.123:9000",
-	"http://122.70.137.12:808",
-	"http://190.0.17.202:8080"
-]
+@timeout = 3
 @proxiesQueue = Queue.new
 @mutex = Mutex.new
 
 def initProxies
-	@proxyies.each{|e| @proxiesQueue << e}
+	@proxiesQueue << nil
+	File.open('proxies.txt').each do |line|
+		proxy = "http://#{line.strip}"
+  		@proxiesQueue << proxy
+	end
 	changeProxy
 end
 
 def changeProxy(activeProxy = nil)
 	@mutex.synchronize do
 		return if activeProxy != @proxy
-		@proxy = queue.pop(true) rescue nil
+		@proxy = @proxiesQueue.pop(true) rescue nil
 		p "Use proxy: #{@proxy}"
 	end
 end
@@ -42,7 +34,7 @@ def openLink(link)
 	activeProxy = @proxy
 
 	begin
-		result = open(link, 'User-Agent' => @userAgent, :proxy => activeProxy)
+		result = open(link, 'User-Agent' => @userAgent, :proxy => activeProxy, :read_timeout => @timeout)
 		@mutex.synchronize do
 			@proxyUsed = true
 		end
@@ -105,5 +97,5 @@ begin
 rescue SystemExit, Interrupt
 	p "SystemExit"
 rescue Exception => e
-	p e.to_s
+	p "Exception: #{e.to_s}"
 end
