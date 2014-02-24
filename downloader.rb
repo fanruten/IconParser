@@ -5,10 +5,11 @@ require 'RMagick'
 require 'open-uri'
 require 'nokogiri'
 require "open-uri"
+require 'json'
 
 @userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_1) AppleWebKit/537.36 (KHTML, like Gecko)"
 @proxy = nil
-@threadsCount = 10
+@threadsCount = 15
 @timeout = 3
 @proxiesQueue = Queue.new
 @mutex = Mutex.new
@@ -17,7 +18,7 @@ def initProxies
 	@proxiesQueue << nil
 	File.open('proxies.txt').each do |line|
 		proxy = "http://#{line.strip}"
-  		@proxiesQueue << proxy
+		@proxiesQueue << proxy
 	end
 	changeProxy
 end
@@ -72,30 +73,57 @@ def processGenre(genreLink)
 
 	threads = []
 	@threadsCount.times do
-	    threads << Thread.new do
-	    	while (link = queue.pop(true) rescue nil)
+		threads << Thread.new do
+			while (link = queue.pop(true) rescue nil)
 				p "Process app: #{link.text}"
 				processApp(link['href'])
-	      	end
-	    end
+			end
+		end
 	end
 
 	threads.each {|t| t.join }
 end
 
 def processApps()
-	doc = Nokogiri::HTML(openLink('https://itunes.apple.com/ru/genre/ios/id36?mt=8').read)
-	doc.css('a.top-level-genre').each do |link|	
-		p "Process category: #{link.text}"
-		processGenre(link['href'])
+	generes = nil
+
+	begin
+		File.open("generes.db","r") do |f|
+			links = JSON.load(f)
+		end
+
+	rescue Exception => e
+		p "Exception: #{e.to_s}"
+
+	end
+	
+	if !generes
+		doc = Nokogiri::HTML(openLink('https://itunes.apple.com/ru/genre/ios/id36?mt=8').read)
+		links = doc.css('a.top-level-genre').to_a
+		generes = Hash.new
+		links.each do |link|
+			generes[link.text] = link['href']
+		end
+	end
+
+	p generes.class
+
+	begin
+		generes.delete_if do |key, value|	
+			p "Process category: #{key}"
+			processGenre(value)
+			true
+		end
+	rescue SystemExit, Interrupt
+		File.open("generes.db","w") do |f|
+			f.write(JSON.pretty_generate(generes))
+		end		
 	end
 end
 
 begin
 	initProxies
- 	processApps
-rescue SystemExit, Interrupt
-	p "SystemExit"
+	processApps
 rescue Exception => e
 	p "Exception: #{e.to_s}"
 end
